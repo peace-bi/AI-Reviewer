@@ -1,9 +1,14 @@
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any, Union, Optional, Tuple
 from dataclasses import dataclass
 import re
 import requests
 import os
 import json
+import hashlib
+from langchain.tools import StructuredTool
+from langchain.agents import create_openai_functions_agent, AgentExecutor
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.prompts import ChatPromptTemplate
 
 @dataclass
 class CodeReviewConfig:
@@ -49,39 +54,71 @@ class CodeReviewPipeline:
         return "\n".join(formatted_diffs) if formatted_diffs else "No changes found in the diff"
     
     def _prepare_review_prompt(self, content: str) -> str:
-        """Prepare the review prompt with formatted content and instructions for structured output"""
-        return f"""As expert in code review, please review this merge request and provide feedback:
+        """
+        Prepare the review prompt with formatted content and instructions for structured output.
+        Optimized for single line comments with line range mentions.
+        """
+        return f"""As an expert code reviewer, analyze this merge request and provide actionable feedback focusing on critical production issues:
         {content}
-        Provide a concise but thorough code review focusing on:
-        1. Code quality and best practices
-        2. Potential bugs or issues
-        3. Security concerns
-        4. Performance implications
-        5. Suggestions for improvement
 
-        Format your response as a clear, professional code review comment.
+        Focus ONLY on these critical aspects:
+        1. Logic errors or bugs that could affect business logic
+        2. Performance issues that could impact user experience
+        3. Critical code style violations (e.g., naming that causes confusion, deeply nested code)
+        4. Security vulnerabilities
+        5. Breaking changes in APIs or interfaces
 
-        ---
-        For any specific line comments or suggestions, output a JSON array at the end of your review, with each item in the following format:
+        DO NOT comment on:
+        - Missing logs or tracking
+        - Minor style issues
+        - Missing comments or documentation
+        - Test coverage (unless it's a critical flow)
+
+        Output a JSON array with detailed comments using this format:
         [
           {{
-            "position_type": "<position type, text or image>",
+            "position_type": "text",
             "new_path": "<file path after change>",
-            "new_line": <line number after change>,
-            "old_path": "<file path before change, optional>",
-            "old_line": <line number before change, optional>,
-            "line_range": {{
-                "start": {{"type": "new", "new_line": 10}},
-                "end": {{"type": "new", "new_line": 15}}
-            }},
-            "comment": "AI Review: <your comment>"
+            "new_line": <start line number of the code block>,
+            "old_path": "<file path before change>",
+            "old_line": <Optional, start line number in old version, use when comparing with old code>,
+            "comment": "AI Review [Lines <start>-<end>]: <detailed explanation of the issue, its impact, and suggested improvement>"
           }}
         ]
-        position_type must be required.
-        If the comment is for a multiline range, use "line_range" as above. If for a single line, use "new_line" instead of "line_range".
-        Only include this JSON if you have specific line comments. 
-        The comment should be in the format of "AI Review: <your comment>". 
-        Do not add explanations outside the JSON block.
+
+        Important notes for comments:
+        1. When reviewing a function or code block:
+           - new_line MUST point to the actual function/component definition line
+           - [Lines X-Y] MUST cover the entire function/block being discussed, with X and Y being the start and end line numbers of the function/block
+           - If discussing a specific line within a function, still point to function definition but mention the specific line in the comment
+           - NEVER point to empty lines or import statements when discussing a component/function
+        2. Place comment at the first line of the discussed code block
+        3. Prefix all comments with "AI Review "
+        4. Include only comments for code present in the diff
+        5. Double check that line numbers in [Lines X-Y] correspond to the actual code being discussed
+
+        Focus on making each comment:
+        - Highlight potential production risks
+        - Explain performance implications if any
+        - Point out breaking changes or API inconsistencies
+        - Suggest fixes for critical code style issues
+
+        Example of good comment placement:
+        ```typescript
+        // Old version
+        12  function handleData(data) {{
+        
+        // New version
+        15  function processData(data) {{  // <- renamed function
+        16    // Implementation
+        25  }}
+        ```
+        Comment should be:
+        {{
+          "new_line": 15,  // Points to new function definition
+          "old_line": 12,  // Points to old function definition
+          "comment": "AI Review [Lines 15-25]: Function rename from 'handleData' to 'processData' may break existing callers. Ensure all call sites are updated."
+        }}
         """
 
     
@@ -252,47 +289,114 @@ def get_gitlab_mr_diff_refs(project_id, mr_iid, api_url=None, api_token=None):
     head_sha = diff_refs.get("head_sha")
     return base_sha, start_sha, head_sha
 
-async def post_line_comments_with_mcp(agent, project_id, mr_iid, comments):
+def gitlab_create_merge_request_thread(
+    project_id: str,
+    merge_request_iid: int,
+    body: str,
+    position_type: str,
+    new_path: str,
+    old_path: str,
+    base_sha: str,
+    start_sha: str,
+    head_sha: str,
+    new_line: str,
+    old_line: str,
+    **kwargs
+) -> str:
     """
-    Post each line comment to GitLab MR using MCP agent and gitlab_create_merge_request_thread tool.
-    comments: list of dicts with position fields and comment.
-    Strictly require AI to only use gitlab_create_merge_request_thread and only include non-None fields.
-    Support multiline comments via line_range.
+    Call GitLab API to create an inline comment (thread) on a merge request.
     """
-    # Lấy diff_refs
+    api_url = os.getenv("GITLAB_API_URL", "https://gitlab.com/api/v4")
+    api_token = os.getenv("GITLAB_API_TOKEN")
+    url = f"{api_url}/projects/{project_id}/merge_requests/{merge_request_iid}/discussions"
+
+    # Build position object
+    position = {
+        "position_type": position_type,
+        "base_sha": base_sha,
+        "start_sha": start_sha,
+        "head_sha": head_sha,
+        "new_path": new_path,
+        "old_path": old_path,
+        "new_line": new_line,
+        "old_line": old_line
+    }
+
+    # Add optional fields if they exist in kwargs
+    optional_fields = ["width", "height", "x", "y"]
+    for field in optional_fields:
+        if field in kwargs:
+            position[field] = kwargs[field]
+
+    # Handle line_range if it exists
+    if "line_range" in kwargs:
+        position["line_range"] = kwargs["line_range"]
+
+    # Create request data
+    data = {
+        "body": body,
+        "position": position
+    }
+
+    # Add created_at if provided
+    if "created_at" in kwargs:
+        data["created_at"] = kwargs["created_at"]
+
+    headers = {
+        "PRIVATE-TOKEN": api_token,
+        "Content-Type": "application/json"
+    }
+
+    print(f"[MCP] Creating merge request thread with data: {json.dumps(data, indent=2)}")
+    response = requests.post(url, headers=headers, json=data)
+    
+    if response.status_code >= 400:
+        print(f"Error creating merge request thread. Status code: {response.status_code}")
+        print(f"Response: {response.text}")
+        raise Exception(f"Failed to create merge request thread: {response.text}")
+    
+    return response.json()["id"]
+
+
+def post_line_comments_direct(project_id, mr_iid, comments):
+    """
+    Gửi tất cả line comments lên GitLab MR bằng cách gọi trực tiếp hàm gitlab_create_merge_request_thread.
+    Hàm này là đồng bộ (sync), KHÔNG dùng await khi gọi.
+    Nếu muốn gọi trong async context, hãy dùng: await asyncio.to_thread(post_line_comments_direct, ...)
+    """
     base_sha, start_sha, head_sha = get_gitlab_mr_diff_refs(project_id, mr_iid)
     if not (base_sha and start_sha and head_sha):
         print("Could not get diff_refs (base_sha, start_sha, head_sha) from MR API.")
         return
 
-    print(f"[MCP] Posting {len(comments)} line comments to MR {mr_iid} in project {project_id}...")
-    for c in comments:
-        comment = c.get("comment")
-        if not comment:
-            print(f"[MCP] Skipping invalid comment: {c}")
-            continue
-        prompt = (
-            "Use `gitlab_create_merge_request_thread` tool\n"
-            "After calling the tool, you must output 'Final Answer: Comment posted' and stop.\n"
-            "If you encounter an error, output 'Final Answer: Error - <error message>' and stop.\n"
-            "Do not call the tool again for the same comment.\n"
-            "Do not use any other tool or endpoint.\n"
-            "with parameters: \n"
-            f"project_id: {project_id}\n"
-            f"merge_request_iid: {mr_iid}\n"
-            f"body: {comment}\n"
-            f"new_path: {c.get('new_path')}\n"
-            f"new_line: {c.get('new_line')}\n"
-            f"position_type: {c.get('position_type')}\n"
-            f"base_sha: {base_sha}\n"
-            f"start_sha: {start_sha}\n"
-            f"head_sha: {head_sha}\n"
-            f"line_range: {c.get('line_range')}\n"
-            "Anything None value must be excluded from request."
-        )
-        print(f"[MCP] Posting prompt: {prompt}")
-        response = await agent.run(prompt)
-        print(f"[MCP] Response: {response}")
+    print(f"[MCP] Posting {len(comments)} line comments to MR {mr_iid} in project {project_id} (direct API mode)...")
+    for idx, c in enumerate(comments, 1):
+        try:
+            # Validate comment has required fields
+            if not c.get("new_path") or not c.get("new_line") or not c.get("comment"):
+                print(f"[MCP] Comment {idx}: Skipped - Missing required fields (need new_path, new_line, and comment). Data: {c}")
+                continue
+
+            # Build comment parameters
+            comment_params = {
+                "project_id": project_id,
+                "merge_request_iid": mr_iid,
+                "body": c["comment"],
+                "position_type": c.get("position_type", "text"),
+                "new_path": c["new_path"],
+                "old_path": c["old_path"],
+                "base_sha": base_sha,
+                "start_sha": start_sha,
+                "head_sha": head_sha,
+                "new_line": c["new_line"],
+                "old_line": c.get("old_line", None),
+            }
+            print("comment_params", comment_params)
+
+            result = gitlab_create_merge_request_thread(**comment_params)
+            print(f"[MCP] Comment {idx}: Success - {result}")
+        except Exception as e:
+            print(f"[MCP] Comment {idx}: Error - {e}")
 
 # Example usage after getting review:
 def debug_ai_review_and_comments(review):

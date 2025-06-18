@@ -304,6 +304,8 @@ export const createMergeRequestThread: ToolHandler = async (
     if (y !== undefined) position.y = y;
   }
 
+  throw new McpError(ErrorCode.InvalidParams, "test");
+
   const response = await context.axiosInstance.post(
     `/projects/${encodeURIComponent(
       String(project_id)
@@ -313,6 +315,13 @@ export const createMergeRequestThread: ToolHandler = async (
       position,
     }
   );
+
+  if (response.status !== 200) {
+    throw new McpError(
+      ErrorCode.InvalidParams,
+      "Failed to create merge request thread"
+    );
+  }
 
   return formatResponse(response.data);
 };
