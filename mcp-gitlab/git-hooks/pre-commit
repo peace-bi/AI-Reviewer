@@ -1,0 +1,22 @@
+#!/bin/sh
+
+# Pre-commit hook to automatically generate TOOLS.md from tools-data.ts
+echo "Running pre-commit hook to update TOOLS.md..."
+
+# Check if tools-data.ts has been modified
+if git diff --cached --name-only | grep -q "src/utils/tools-data.ts"; then
+  echo "src/utils/tools-data.ts has changed, regenerating TOOLS.md..."
+  
+  # Run the script to regenerate TOOLS.md
+  node scripts/generate-tools-md.js
+  
+  # Add the updated TOOLS.md to the commit
+  git add TOOLS.md
+  
+  echo "TOOLS.md has been updated and added to the commit."
+else
+  echo "No changes to src/utils/tools-data.ts, skipping TOOLS.md generation."
+fi
+
+# Return success
+exit 0

@@ -1,0 +1,29 @@
+{
+  "name": "mcp-gitlab",
+  "version": "0.1.0",
+  "description": "A gitlab MCP server that enables you to interact with your gitlab account. Get diff, analyse MR, review MR, cherry-picks, etc have never been easier.",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "mcp-gitlab": "./build/index.js"
+  },
+  "files": [
+    "build"
+  ],
+  "scripts": {
+    "build": "tsc && node -e \"import('fs').then(fs => fs.chmodSync('build/index.js', '755'))\"",
+    "prepare": "npm run build",
+    "watch": "tsc --watch",
+    "inspector": "npx @modelcontextprotocol/inspector build/index.js",
+    "install-hooks": "cp -f git-hooks/pre-commit .git/hooks/ && chmod +x .git/hooks/pre-commit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.7.0",
+    "axios": "^1.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "typescript": "^5.3.3",
+    "@types/express": "^4.17.21"
+  }
+}

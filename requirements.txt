@@ -1,0 +1,25 @@
+# Dev environment
+pip
+autopep8
+
+# Core App
+langchain_core
+langchain_community
+langchain-huggingface
+sentence-transformers  # For embeddings
+chromadb  # Vector store
+langchain-google-genai # Gemini API integration
+Pillow # PIL image-loading library
+
+# Code parsing & vector store
+protobuf==3.20.3  # Fix for ChromaDB/protobuf compatibility
+opentelemetry-exporter-otlp  # ChromaDB dependency
+
+# Tree-sitter for code parsing
+# (langchain_community uses tree-sitter for LanguageParser)
+tree-sitter
+tree-sitter-languages
+
+tqdm  # Progress bar utility
+
+mcp-use

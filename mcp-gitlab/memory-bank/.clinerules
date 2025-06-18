@@ -1,0 +1,157 @@
+# Cline Rules: GitLab MCP Server
+
+## Project Patterns
+
+### Code Style and Structure
+- Use TypeScript for all new code
+- Follow ES6+ syntax and patterns
+- Use async/await for asynchronous operations
+- Maintain clear error handling with descriptive messages
+- Use detailed JSDoc comments for functions and classes
+- Keep Git commits focused and descriptive
+- Use modular file organization with domain-specific managers
+- Implement tool registry pattern for mapping tool names to handlers
+- When adding new tools, update the tool registry, tool definitions and documentation
+
+### Documentation and Workflow Patterns
+- Use the generate-tools-md.js script to generate TOOLS.md from tools-data.ts
+- Git hooks automatically update documentation on commit
+- Always run npm run install-hooks after cloning the repository
+- When modifying tools-data.ts, the pre-commit hook will update TOOLS.md
+- Document all new tools with proper descriptions and parameters
+- Organize tools by category in documentation
+- Use the npm run install-hooks script to set up git hooks
+- Keep README.md and TOOLS.md in sync through automated tooling
+- Include both implementation and documentation in the same PR
+- For sections with special characters like ampersands, use the correct GitHub-compatible anchor format
+  - "User & Group Management" → "#user--group-management" 
+  - "Integrations & Webhooks" → "#integrations--webhooks"
+
+### Server Implementation Patterns
+- Use `connect` method with the transport for server initialization
+- Implement async/await pattern for server startup
+- Add proper error handling for server initialization
+- Create separate methods for server setup and startup
+- Follow MCP SDK patterns for transport configuration
+- Add try/catch blocks for async operations to handle errors gracefully
+
+### Tool Definition Patterns
+- Create complete tool definitions for all implemented tools in tools-data.ts
+- Keep toolDefinitions array and toolRegistry object in sync
+- Use consistent schema patterns for similar tools
+- Ensure all required parameters are marked as required in the schema
+- Categorize tools by domain using array slicing for exports
+- Include clear descriptions for tools and their parameters
+- Use enum for parameters with specific valid values
+- Use proper schema for complex types like pipeline variables
+- Document parameter requirements in tool descriptions
+
+### Type Safety Patterns
+- Ensure proper type casting for all API parameters
+- Validate required parameters before making API calls
+- Add explicit validation for required parameters with descriptive error messages
+- Use type assertions only when you're certain of the type
+- Add interface definitions for complex parameters
+- Ensure webhook parameters include required URL field
+- Type pipeline variables properly as Record<string, string> | undefined
+- Ensure proper types for all exported functions and interfaces
+
+### API Patterns
+- All GitLab API calls should use the central axiosInstance
+- Properly encode URL parameters for GitLab API paths
+- Handle and transform GitLab API responses consistently
+- Implement proper error handling for all API calls
+- Follow GitLab API v4 conventions for endpoints
+- Use domain manager classes to organize related API functionality
+- Create reusable utility functions for common API operations
+
+### MCP Protocol Patterns
+- Ensure all tool implementations follow MCP protocol specifications
+- Return structured error messages for easier troubleshooting
+- Format responses according to MCP content types
+- Document all tools with clear descriptions and parameter details
+- Use the proper method for setting up MCP server transport
+- Follow async patterns for server connection and startup
+- Ensure all implemented tool handlers have corresponding tool definitions
+
+## Development Workflow
+- Use `npm run build` to compile TypeScript code
+- Use `npm run install-hooks` to set up git hooks
+- Fix any TypeScript compilation errors immediately before proceeding
+- Test changes with real GitLab repositories
+- Keep documentation in sync with code changes using git hooks
+- Consider backward compatibility when modifying existing tools
+- Update the progress.md file when implementing new features
+- Ensure server initialization and connection works properly before adding new features
+- Verify that all implemented tools are properly defined in tools-data.ts
+
+## Implementation Guidelines
+- Keep tool implementations modular and focused
+- Use the domain manager classes for related functionality
+- Reuse API calling patterns where appropriate
+- Consider GitLab API rate limits in implementation
+- Implement pagination for list operations where needed
+- Follow security best practices for handling tokens and sensitive data
+- Use consistent error handling patterns across all domain managers
+- Use proper TypeScript type casting for parameters to ensure type safety
+- Validate all required parameters before making API calls
+- Extract common functionality into shared methods within domain managers
+- Follow a consistent pattern for handler functions in index.ts
+- Use the tool registry pattern for registering and accessing tool handlers
+- Maintain synchronization between tool registry and tool definitions
+
+## Documentation Generation
+- Use the scripts/generate-tools-md.js script to generate TOOLS.md
+- The script parses tools-data.ts to extract tool definitions
+- Tool documentation is organized by category
+- Each tool includes its name, description, and parameters
+- Parameters include name, type, required flag, and description
+- Git pre-commit hook automatically updates TOOLS.md when tools-data.ts changes
+- The hook is stored in git-hooks/ and can be installed with npm run install-hooks
+- Handle special characters in anchor links correctly for GitHub compatibility
+- Use hardcoded anchor links for sections with ampersands to ensure correct navigation
+- Always run the documentation generator after making changes to tools-data.ts if not using the git hook
+
+## Testing Approach
+- Test with both GitLab.com and self-hosted instances
+- Verify error cases and edge conditions
+- Test with repositories of varying sizes and structures
+- Ensure proper handling of non-ASCII characters in responses
+- Validate error messages are helpful and descriptive
+- Verify proper type checking for all parameters
+- Test server initialization and connection with different environments
+- Verify proper error handling for failed connections
+- Verify all tools are visible to the AI assistant
+- Test the documentation generation script with various tool definitions
+- Verify the git pre-commit hook correctly updates documentation
+- Check that anchor links work correctly in generated documentation
+
+## Documentation Standards
+- Maintain clear README with setup instructions
+- Document all tools with parameters and return values
+- Include usage examples for common operations
+- Keep configuration instructions up to date
+- Document known limitations and issues
+- Document type requirements for tool parameters
+- Document server initialization and startup process
+- Use TOOLS.md as the single source of truth for tool documentation
+- Keep README.md focused on setup, configuration, and general usage
+- Include attribution to original projects when extending them
+- Use proper licensing information in LICENSE file
+- Maintain consistent formatting in documentation
+- Use Markdown tables for structured information
+- Include table of contents for longer documentation files
+- Ensure anchor links work correctly in documentation
+- Organize tools by functional category in documentation
+
+## Project Organization
+- Keep scripts in the scripts/ directory
+- Store git hooks in git-hooks/ directory
+- Use src/utils for utility functions
+- Organize tool handlers by domain
+- Use domain-specific manager classes for related functionality
+- Keep tool definitions in a central location (tools-data.ts)
+- Maintain memory-bank directory for project documentation
+- Group related functions in appropriate files
+- Keep the root directory clean and focused on essential files
+- Store configuration examples in a dedicated section of README.md
