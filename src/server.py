@@ -4,10 +4,7 @@ import uvicorn
 from agent import setup_mcp_client, setup_llm, create_agent, review_merge_request
 from code_review import CodeReviewPipeline
 from rag_utils import create_or_load_vectorstore
-import asyncio
-from typing import Optional
 import signal
-import sys
 
 app = FastAPI(title="AI Code Review API")
 

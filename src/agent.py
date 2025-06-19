@@ -124,13 +124,14 @@ async def review_merge_request(
             vectorstore = create_or_load_vectorstore(persist_directory="./chroma")
         
         print("\nStarting code review...")
-        review = await review_pipeline.review_merge_request(agent, mr_iid, project_id, vectorstore)
+        review, mr_info = await review_pipeline.review_merge_request(agent, mr_iid, project_id, vectorstore)
         print("\nCode Review Result:")
         print(review)
 
         # Extract and post line comments
         comments = debug_ai_review_and_comments(review)
-        post_line_comments_direct(project_id, mr_iid, comments)
+        diffs = mr_info.get("changes", []) if mr_info else []
+        post_line_comments_direct(project_id, mr_iid, comments, diffs=diffs)
         
         return review
     
