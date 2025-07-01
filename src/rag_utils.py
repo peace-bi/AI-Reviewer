@@ -2,9 +2,13 @@ from langchain_community.document_loaders.generic import GenericLoader
 from langchain_community.document_loaders.parsers import LanguageParser
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 def load_codebase(source_dir: str, file_pattern: str = "**/*") -> list:
     """
@@ -93,13 +97,18 @@ def split_documents(documents: list) -> list:
     print(f"Created {len(chunks)} chunks")
     return chunks
 
-def create_or_load_vectorstore(chunks: list = None, persist_directory: str = "./chroma") -> Chroma:
+def create_or_load_vectorstore(chunks: list = None, persist_directory: str = None) -> Chroma:
     """
     Create new vector store or load existing one
     """
+    # Use environment variable for persist directory if not provided
+    if persist_directory is None:
+        persist_directory = os.getenv("PERSIST_DIRECTORY", "./chroma")
+    
     # Initialize the embedding model
     print("Initializing embedding model")
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    embedding_model = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+    embeddings = HuggingFaceEmbeddings(model_name=embedding_model)
 
     # Check if vector store exists
     if os.path.exists(persist_directory) and os.listdir(persist_directory):
@@ -108,20 +117,35 @@ def create_or_load_vectorstore(chunks: list = None, persist_directory: str = "./
     else:
         print("Creating new Chroma DB")
         os.makedirs(persist_directory, exist_ok=True)
-        vectorstore = Chroma.from_documents(
-            documents=chunks,
-            embedding=embeddings,
-            persist_directory=persist_directory
-        )
-        vectorstore.persist()
+        
+        # If no chunks provided, create an empty vectorstore
+        if chunks is None or len(chunks) == 0:
+            print("No documents provided, creating empty vectorstore")
+            vectorstore = Chroma(
+                embedding_function=embeddings,
+                persist_directory=persist_directory
+            )
+        else:
+            vectorstore = Chroma.from_documents(
+                documents=chunks,
+                embedding=embeddings,
+                persist_directory=persist_directory
+            )
+        
         print("Chroma DB created and persisted")
     
     return vectorstore
 
-def index_codebase(source_dir: str, persist_directory: str = "./chroma"):
+def index_codebase(source_dir: str = None, persist_directory: str = None):
     """
     Main function to index the codebase
     """
+    # Use environment variable for source directory if not provided
+    if source_dir is None:
+        source_dir = os.getenv("SOURCE_DIR")
+        if not source_dir:
+            raise ValueError("SOURCE_DIR environment variable is required. Please set it in your .env file or pass it as a parameter.")
+    
     # Load and process the codebase
     documents = load_codebase(source_dir)
     chunks = split_documents(documents)
@@ -145,9 +169,8 @@ def get_related_code(vectorstore, query: str, k: int = 3) -> str:
     return "\n\n".join(related)
 
 if __name__ == "__main__":
-    # Example usage
-    source_dir = "/Users/linh.nguyen14/Workspaces/mini-app"  # Replace with your codebase directory
-    vectorstore = index_codebase(source_dir)
+    # Example usage - will use environment variables from .env file
+    vectorstore = index_codebase()
     
     # Test queries
     test_queries = [
