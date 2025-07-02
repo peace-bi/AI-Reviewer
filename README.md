@@ -23,7 +23,6 @@ An intelligent code review system that leverages AI to analyze merge requests an
 
 ```bash
 git clone https://github.com/peace-bi/AI-Reviewer.git
-cd cvs-ai
 ```
 
 ### 2. Create Virtual Environment
