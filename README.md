@@ -1,4 +1,4 @@
-# CVS-AI: AI-Powered Code Review System
+# AI-Powered Code Review System
 
 An intelligent code review system that leverages AI to analyze merge requests and provide comprehensive code reviews using GitLab integration and advanced language models.
 
@@ -22,7 +22,7 @@ An intelligent code review system that leverages AI to analyze merge requests an
 ### 1. Clone the Repository
 
 ```bash
-git clone https://gitlab.mservice.com.vn/cvs-app-modules/ai/cvs-ai.git
+git clone https://github.com/peace-bi/AI-Reviewer.git
 cd cvs-ai
 ```
 
